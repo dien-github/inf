@@ -1,17 +1,17 @@
 import os
-from metrics import *
-from model import *
+from metrics import get_image_paths, get_target_from_data, eval_semantic_results
+from model import Model
 from PIL import Image
 import time
-import numpy as np
+# import numpy as np
 
 if __name__ == "__main__":
     #ONLY CHANGE 5 LINES
-    data_path = './sample_test' #path to dataset
+    data_path = '../lars/' #path to dataset
     nc = 10 #number of class
-    path_to_model = "./model.tflite" #path to model
+    path_to_model = "../model/model_x.tflite" #path to model
     model = Model(model_path=path_to_model) 
-    dataset_name = "dataset" #must be one of these names: "lars", "rescuenet", "loveda"
+    dataset_name = "lars" #must be one of these names: "lars", "rescuenet", "loveda"
     #
 
     input_size = 320

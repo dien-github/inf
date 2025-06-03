@@ -1,3 +1,5 @@
+# Old code
+"""
 import numpy as np
 import tflite_micro_runtime.interpreter as tflite
 
@@ -44,4 +46,56 @@ class Model(object):
         results = np.squeeze(output_data).transpose()
 
         return results
+"""
 
+import numpy as np
+import tflite_runtime.interpreter as tflite
+
+
+class Model(object):
+    def __init__(self, model_path):
+        # initial interpreter
+        self.interpreter = tflite.Interpreter(model_path=model_path)
+        self.interpreter.allocate_tensors()
+
+        # get input/output tensor
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
+
+        # check the type of the input tensor
+        self.floating_model = self.input_details[0]["dtype"] == "float32"
+
+        # Expecting input shape [1, channels, height, width]
+        self.input_height = self.input_details[0]["shape"][2]
+        self.input_width = self.input_details[0]["shape"][3]
+        self.input_channels = self.input_details[0]["shape"][1]
+
+        self.num_classes = self.output_details[0]["shape"][1]
+
+        self.input_mean = 0.0
+        self.input_std = 255.0
+
+        self.keypoint_count = 0
+        self.score_threshold = 0.6
+
+    def prepare(self):
+        return None
+
+    def predict(self, image):
+        # If image [HxWxC]
+        if image.shape == (self.input_height, self.input_width, self.input_channels):
+            # => image: [CxHxW]
+            image = np.transpose(image, (2, 0, 1))
+        # image: [1xCxHxW]
+        input_data = np.expand_dims(image, axis=0)
+
+        if self.floating_model:
+            input_data = (np.float32(input_data) - self.input_mean) / self.input_std
+        else:
+            input_data = input_data.astype(self.input_details[0]["dtype"])
+
+        self.interpreter.set_tensor(self.input_details[0]["index"])
+        self.interperter.invoke()
+        # output: [1xNxHxW]
+        output_data = self.interpreter.get_tensor(self.output_details[0]["index"])
+        return np.squeeze(output_data)  # output: [NxHxW]

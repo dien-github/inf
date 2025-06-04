@@ -84,9 +84,9 @@ class Model(object):
 
     def predict(self, image):
         # If image [HxWxC]
-        if image.shape == (self.input_height, self.input_width, self.input_channels):
-            # => image: [CxHxW]
-            image = np.transpose(image, (2, 0, 1))
+        # if image.shape == (self.input_height, self.input_width, self.input_channels):
+        #     # => image: [CxHxW]
+        #     image = np.transpose(image, (2, 0, 1))
         # image: [1xCxHxW]
         input_data = np.expand_dims(image, axis=0)
 

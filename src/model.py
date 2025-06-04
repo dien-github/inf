@@ -49,6 +49,7 @@ class Model(object):
 """
 
 import numpy as np
+
 # import tflite_runtime.interpreter as tflite
 import tflite_micro_runtime.interpreter as tflite
 
@@ -83,11 +84,12 @@ class Model(object):
         return None
 
     def predict(self, image):
-        # If image [HxWxC]
-        # if image.shape == (self.input_height, self.input_width, self.input_channels):
-        #     # => image: [CxHxW]
-        #     image = np.transpose(image, (2, 0, 1))
-        # image: [1xCxHxW]
+        # Đảm bảo image là numpy array
+        if not hasattr(image, "shape"):
+            image = np.array(image)
+
+        if image.shape == (self.input_height, self.input_width, self.input_channels):
+            image = np.transpose(image, (2, 0, 1))
         input_data = np.expand_dims(image, axis=0)
 
         if self.floating_model:
@@ -95,8 +97,7 @@ class Model(object):
         else:
             input_data = input_data.astype(self.input_details[0]["dtype"])
 
-        self.interpreter.set_tensor(self.input_details[0]["index"])
-        self.interperter.invoke()
-        # output: [1xNxHxW]
+        self.interpreter.set_tensor(self.input_details[0]["index"], input_data)
+        self.interpreter.invoke()
         output_data = self.interpreter.get_tensor(self.output_details[0]["index"])
-        return np.squeeze(output_data)  # output: [NxHxW]
+        return np.squeeze(output_data)

@@ -8,7 +8,7 @@ import time
 if __name__ == "__main__":
     #ONLY CHANGE 5 LINES
     data_path = '../lars-new' #path to dataset
-    nc = 10 #number of class
+    nc = 3 #number of class
     path_to_model = "../model/model_micro.tflite" #path to model
     model = Model(model_path=path_to_model) 
     dataset_name = "lars" #must be one of these names: "lars", "rescuenet", "loveda"

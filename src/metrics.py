@@ -4,7 +4,7 @@
 
 # import math
 # import warnings
-from pathlib import Path
+# from pathlib import Path
 
 # import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +14,7 @@ import json
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from PIL import Image, ImageDraw
-import cv2
+# import cv2
 
 def threaded(func):
     """Decorator @threaded to run a function in a separate thread, returning the thread instance."""

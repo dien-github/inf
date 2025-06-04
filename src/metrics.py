@@ -13,7 +13,7 @@ import os
 import json
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from PIL import Image
+from PIL import Image, ImageDraw
 import cv2
 
 def threaded(func):
@@ -974,28 +974,45 @@ def xyn2xy(x, w=640, h=640, padw=0, padh=0):
     y[..., 1] = h * x[..., 1] + padh  # top left y
     return y
 
+# def polygon2mask(img_size, polygons, color=1, downsample_ratio=1):
+#     """
+#     Args:
+#         img_size (tuple): The image size.
+#         polygons (np.ndarray): [N, M], N is the number of polygons,
+#             M is the number of points(Be divided by 2).
+#     """
+#     mask = np.zeros(img_size, dtype=np.uint8)
+#     polygons = np.asarray(polygons)
+#     polygons = polygons.astype(np.int32)
+#     shape = polygons.shape
+#     polygons = polygons.reshape(shape[0], -1, 2)
+#     cv2.fillPoly(mask, polygons, color=color)
+#     nh, nw = (img_size[0] // downsample_ratio, img_size[1] // downsample_ratio)
+#     # NOTE: fillPoly firstly then resize is trying the keep the same way
+#     # of loss calculation when mask-ratio=1.
+#     mask = cv2.resize(mask, (nw, nh))
+#     # print(mask.shape)
+#     # if os.path.exists('./mask0.png'):
+#     #     cv2.imwrite('./mask1.png', mask)
+#     # else:
+#     #     cv2.imwrite('./mask0.png', mask)
+#     return mask
+
 def polygon2mask(img_size, polygons, color=1, downsample_ratio=1):
-    """
-    Args:
-        img_size (tuple): The image size.
-        polygons (np.ndarray): [N, M], N is the number of polygons,
-            M is the number of points(Be divided by 2).
-    """
-    mask = np.zeros(img_size, dtype=np.uint8)
+    mask = Image.new('L', img_size, 0)
     polygons = np.asarray(polygons)
-    polygons = polygons.astype(np.int32)
+    polygons = polygons.astype(np.float32)
     shape = polygons.shape
     polygons = polygons.reshape(shape[0], -1, 2)
-    cv2.fillPoly(mask, polygons, color=color)
-    nh, nw = (img_size[0] // downsample_ratio, img_size[1] // downsample_ratio)
-    # NOTE: fillPoly firstly then resize is trying the keep the same way
-    # of loss calculation when mask-ratio=1.
-    mask = cv2.resize(mask, (nw, nh))
-    # print(mask.shape)
-    # if os.path.exists('./mask0.png'):
-    #     cv2.imwrite('./mask1.png', mask)
-    # else:
-    #     cv2.imwrite('./mask0.png', mask)
+    draw = ImageDraw.Draw(mask)
+    for poly in polygons:
+        draw.polygon([tuple(point) for point in poly], outline=color, fill=color)
+    mask = np.array(mask)
+    if downsample_ratio != 1:
+        mask = np.array(Image.fromarray(mask).resize(
+            (img_size[1] // downsample_ratio, img_size[0] // downsample_ratio),
+            resample=Image.NEAREST
+        ))
     return mask
 
 def polygons2masks(img_size, polygons, color, downsample_ratio=1):

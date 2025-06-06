@@ -964,7 +964,8 @@ def eval_semantic_results(results, nc):
     if y_pred.shape[3] != nc:
         print('Wrong class count!')
         return None
-
+    # TODO
+    # thêm verbose nếu cần
     return metrics_np(y_true, y_pred, metric_name='dice')
 
 def xyn2xy(x, w=640, h=640, padw=0, padh=0):

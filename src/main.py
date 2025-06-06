@@ -42,14 +42,3 @@ if __name__ == "__main__":
     score = 2*normFPS*f1/(normFPS + f1)
     print("F1: {:.3f}".format(f1))
     print("Score: {:.3f}".format(score))
-    
-
-
-
-
-
-
-
-
-
-

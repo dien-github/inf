@@ -6,12 +6,12 @@ import time
 import numpy as np
 
 if __name__ == "__main__":
-    #ONLY CHANGE 5 LINES
-    data_path = '../lars' #path to dataset
-    nc = 3 #number of class
-    path_to_model = "../model/model_micro.tflite" #path to model
-    model = Model(model_path=path_to_model) 
-    dataset_name = "lars" #must be one of these names: "lars", "rescuenet", "loveda"
+    # ONLY CHANGE 5 LINES
+    data_path = "../lars"  # path to dataset
+    nc = 3  # number of class
+    path_to_model = "../model/20250605_1_pruned.tflite"  # path to model
+    model = Model(model_path=path_to_model)
+    dataset_name = "lars"  # must be one of these names: "lars", "rescuenet", "loveda"
     #
 
     input_size = 320
@@ -35,10 +35,10 @@ if __name__ == "__main__":
         total_time += run_time
         results.append((preds, labels))
 
-    FPS = total_file/total_time
+    FPS = total_file / total_time
     print("Average FPS: {:.3f}".format(FPS))
-    normFPS = FPS/100
+    normFPS = FPS / 100
     f1 = eval_semantic_results(results, nc)
-    score = 2*normFPS*f1/(normFPS + f1)
+    score = 2 * normFPS * f1 / (normFPS + f1)
     print("F1: {:.3f}".format(f1))
     print("Score: {:.3f}".format(score))

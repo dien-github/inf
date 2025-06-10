@@ -11,3 +11,4 @@ sudo pip3 install Pillow
 sudo apt-get install -y libatlas-base-dev libhdf5-dev libhdf5-serial-dev libatlas-base-dev libjasper-dev libqtgui4 libqt4-test
 sudo pip3 install opencv-python-headless
 sudo pip3 install matplotlib
+sudo pip3 install tflite_runtime

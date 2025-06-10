@@ -6,7 +6,7 @@
 # import warnings
 from pathlib import Path
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import threading
 import os
@@ -1173,7 +1173,7 @@ def eval_semantic_results(results, nc):
     y_true = np.array(y_true)
 
     if y_pred.shape != y_true.shape:
-        y_pred = y_pred.transpose(0, 2, 3, 1) # B, H, W, C
+        y_pred = y_pred.transpose(0, 2, 3, 1)  # B, H, W, C
 
     if y_pred.shape[3] != nc:
         print("Wrong class count!")

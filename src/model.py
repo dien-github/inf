@@ -46,7 +46,6 @@
 #         return results
 
 
-
 import numpy as np
 import tflite_runtime.interpreter as tflite
 # import tflite_micro_runtime.interpreter as tflite
@@ -82,13 +81,24 @@ class Model(object):
         return None
 
     def predict(self, image):
-        # Đảm bảo image là numpy array
+        # Đảm bảo image là numpy array RGB
         if not hasattr(image, "shape"):
-            image = np.array(image)
+            image = np.array(image.convert("RGB"))  # Đảm bảo 3 kênh
 
+        # Nếu ảnh là (H, W, 3), chuyển về (3, H, W)
         if image.shape == (self.input_height, self.input_width, self.input_channels):
             image = np.transpose(image, (2, 0, 1))
-        input_data = np.expand_dims(image, axis=0)
+        # Nếu ảnh là (H, W), thêm chiều channel
+        elif image.shape == (self.input_height, self.input_width):
+            image = np.expand_dims(image, axis=0)
+
+        # Đảm bảo shape đúng (3, H, W)
+        if image.shape != (self.input_channels, self.input_height, self.input_width):
+            raise ValueError(
+                f"Input image shape {image.shape} does not match model expected shape ({self.input_channels}, {self.input_height}, {self.input_width})"
+            )
+
+        input_data = np.expand_dims(image, axis=0)  # (1, 3, H, W)
 
         if self.floating_model:
             input_data = (np.float32(input_data) - self.input_mean) / self.input_std

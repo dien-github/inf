@@ -6,15 +6,15 @@
 # import warnings
 from pathlib import Path
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import threading
 import os
 import json
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from PIL import Image, ImageDraw
-# import cv2
+from PIL import Image
+import cv2
 
 def threaded(func):
     """Decorator @threaded to run a function in a separate thread, returning the thread instance."""
@@ -213,7 +213,7 @@ def get_target_from_data(data_path, dataset_name, size):
         return lb_dict
 
     elif dataset_name == "svrdd": #YOLO format with custom folder
-        paths = [data_path + f'{os.sep}' + line.rstrip().replace("\\","/") for line in open(data_path + f'{os.sep}test.txt')]
+        paths = [data_path + f'{os.sep}' + line.rstrip().replace("\\",f'{os.sep}') for line in open(data_path + f'{os.sep}test.txt')]
         lb_paths = img2label_paths(paths)
         lb_dict = dict()
         for lb_file in lb_paths:
@@ -296,6 +296,8 @@ def get_target_from_data(data_path, dataset_name, size):
                 box = [cls] + box.tolist()
                 if box not in bboxes:
                     bboxes.append(box)
+                    
+            bboxes = np.array(bboxes, dtype=np.float32)
 
             lb_dict[img["file_name"].rsplit(".",1)[0]] = bboxes
 
@@ -403,6 +405,8 @@ def get_target_from_data(data_path, dataset_name, size):
                 bboxes.append(box)
                 #if s not in segments:
                 segments.append(s)
+            
+            bboxes = np.array(bboxes, dtype=np.float32)
 
             lb_dict[img["file_name"].rsplit(".",1)[0]] = (bboxes, segments)
 
@@ -513,7 +517,7 @@ def get_image_paths(data_path, dataset_name):
         return paths
 
     elif dataset_name == "svrdd": #YOLO format with custom folder
-        paths = [data_path + f'{os.sep}' + line.rstrip().replace("\\","/") for line in open(data_path + f'{os.sep}test.txt')]
+        paths = [data_path + f'{os.sep}' + line.rstrip().replace("\\",f'{os.sep}') for line in open(data_path + f'{os.sep}test.txt')]
         return paths
 
     elif dataset_name == "idd_fgvd": #VOC format
@@ -679,9 +683,9 @@ def metrics_np(y_true, y_pred, metric_name, metric_type='standard', drop_last = 
     
     # intersection and union shapes are batch_size * n_classes (values = area in pixels)
     axes = (1,2) # W,H axes of each image
-    intersection = np.sum(np.abs(y_pred * y_true), axis=axes) # or, np.logical_and(y_pred, y_true) for one-hot
+    intersection = np.sum(np.abs(y_pred * y_true), axis=axes) # or, np.logical_and(y_pred, y_true) #for one-hot # 
     mask_sum = np.sum(np.abs(y_true), axis=axes) + np.sum(np.abs(y_pred), axis=axes)
-    union = mask_sum  - intersection # or, np.logical_or(y_pred, y_true) for one-hot
+    union = mask_sum  - intersection # or, np.logical_or(y_pred, y_true) # for one-hot # 
     
     if verbose:
         print('intersection (pred*true), intersection (pred&true), union (pred+true-inters), union (pred|true)')
@@ -902,16 +906,17 @@ def eval_mask_results(results, nc, input_size):
         #pred must be a array of shape (N, 6) where each row corresponds to a detection with format [x1, y1, x2, y2, conf, class]
         pred = []
         for polygon in pred_polygons:
-            poly = np.array(polygon[1:]).reshape(-1, 2)
+            poly = np.array(polygon[2:]).reshape(-1, 2)
             label = polygon[0]
+            score = polygon[1]
             x, y = poly.T
-            pred.append([x.min(), y.min(), x.max(), y.max(), 1.0, label])
+            pred.append([x.min(), y.min(), x.max(), y.max(), score, label])
 
         pred = np.array(pred)
 
         pred_masks = []
         for polygon in pred_polygons:
-            pred_masks.append(np.array(polygon[1:]).reshape(-1, 2))
+            pred_masks.append(np.array(polygon[2:]).reshape(-1, 2))
 
         pred_masks = polygons2masks((input_size, input_size), pred_masks, color=1)
 
@@ -946,27 +951,49 @@ def eval_mask_results(results, nc, input_size):
     print(pf % ("all", nt.sum(), mp, mr, map50, map, f1))
     return mp, mr, map50, map, f1
 
+def convert_semantic_mask(mask, nc):
+    if len(mask.shape) == 2 or (len(mask.shape) == 3 and mask.shape[-1] == 1):
+        if nc == 3:
+            mask = np.stack([mask==0, mask==1, mask==2], axis=-1).astype(np.float32)
+        if nc == 8:
+            mask = np.stack([mask==0, mask==1, mask==2, mask==3, mask==4, mask==5, mask==6, mask==7], axis=-1).astype(np.float32)
+        if nc == 11:
+            mask = np.stack([mask==0, mask==1, mask==2, mask==3, mask==4, mask==5, mask==6, mask==7, mask==8, mask==9, mask==10], axis=-1).astype(np.float32)
+
+    mask = np.squeeze(mask)
+
+    return mask
+
 def eval_semantic_results(results, nc):
 
     y_pred = []
     y_true = []
 
     for pred, labels in results:
+        pred = convert_semantic_mask(pred, nc)
         y_pred.append(pred)
         y_true.append(labels)
 
     y_pred = np.array(y_pred)
     y_true = np.array(y_true)
 
-    if y_pred.shape != y_true.shape:
-        y_pred = y_pred.transpose(0, 2, 3, 1)
+    # if y_pred.shape != y_true.shape:
+    #     y_pred = y_pred.transpose(0, 2, 3, 1)
 
     if y_pred.shape[3] != nc:
         print('Wrong class count!')
-        return None
-    # TODO
-    # thêm verbose nếu cần
+        return 0.0
+
     return metrics_np(y_true, y_pred, metric_name='dice')
+
+def new_dice(mask1, mask2):
+    intersect = np.sum(mask1*mask2)
+    fsum = np.sum(mask1)
+    ssum = np.sum(mask2)
+    dice = (2 * intersect ) / (fsum + ssum)
+    dice = np.mean(dice)
+    dice = round(dice, 3)
+    return dice
 
 def xyn2xy(x, w=640, h=640, padw=0, padh=0):
     """Convert normalized segments into pixel segments, shape (n,2)."""
@@ -975,45 +1002,28 @@ def xyn2xy(x, w=640, h=640, padw=0, padh=0):
     y[..., 1] = h * x[..., 1] + padh  # top left y
     return y
 
-# def polygon2mask(img_size, polygons, color=1, downsample_ratio=1):
-#     """
-#     Args:
-#         img_size (tuple): The image size.
-#         polygons (np.ndarray): [N, M], N is the number of polygons,
-#             M is the number of points(Be divided by 2).
-#     """
-#     mask = np.zeros(img_size, dtype=np.uint8)
-#     polygons = np.asarray(polygons)
-#     polygons = polygons.astype(np.int32)
-#     shape = polygons.shape
-#     polygons = polygons.reshape(shape[0], -1, 2)
-#     cv2.fillPoly(mask, polygons, color=color)
-#     nh, nw = (img_size[0] // downsample_ratio, img_size[1] // downsample_ratio)
-#     # NOTE: fillPoly firstly then resize is trying the keep the same way
-#     # of loss calculation when mask-ratio=1.
-#     mask = cv2.resize(mask, (nw, nh))
-#     # print(mask.shape)
-#     # if os.path.exists('./mask0.png'):
-#     #     cv2.imwrite('./mask1.png', mask)
-#     # else:
-#     #     cv2.imwrite('./mask0.png', mask)
-#     return mask
-
 def polygon2mask(img_size, polygons, color=1, downsample_ratio=1):
-    mask = Image.new('L', img_size, 0)
+    """
+    Args:
+        img_size (tuple): The image size.
+        polygons (np.ndarray): [N, M], N is the number of polygons,
+            M is the number of points(Be divided by 2).
+    """
+    mask = np.zeros(img_size, dtype=np.uint8)
     polygons = np.asarray(polygons)
-    polygons = polygons.astype(np.float32)
+    polygons = polygons.astype(np.int32)
     shape = polygons.shape
     polygons = polygons.reshape(shape[0], -1, 2)
-    draw = ImageDraw.Draw(mask)
-    for poly in polygons:
-        draw.polygon([tuple(point) for point in poly], outline=color, fill=color)
-    mask = np.array(mask)
-    if downsample_ratio != 1:
-        mask = np.array(Image.fromarray(mask).resize(
-            (img_size[1] // downsample_ratio, img_size[0] // downsample_ratio),
-            resample=Image.NEAREST
-        ))
+    cv2.fillPoly(mask, polygons, color=color)
+    nh, nw = (img_size[0] // downsample_ratio, img_size[1] // downsample_ratio)
+    # NOTE: fillPoly firstly then resize is trying the keep the same way
+    # of loss calculation when mask-ratio=1.
+    mask = cv2.resize(mask, (nw, nh))
+    # print(mask.shape)
+    # if os.path.exists('./mask0.png'):
+    #     cv2.imwrite('./mask1.png', mask)
+    # else:
+    #     cv2.imwrite('./mask0.png', mask)
     return mask
 
 def polygons2masks(img_size, polygons, color, downsample_ratio=1):
@@ -1151,56 +1161,58 @@ def get_label_json(lb_file, class_dict):
             lb.append(label)
             segments.append(segment)
 
+    lb = np.array(lb, dtype=np.float32)
+
     return lb, segments
 
 
 
-# # Plots ----------------------------------------------------------------------------------------------------------------
+# Plots ----------------------------------------------------------------------------------------------------------------
 
 
-# @threaded
-# def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names=()):
-#     """Plots precision-recall curve, optionally per class, saving to `save_dir`; `px`, `py` are lists, `ap` is Nx2
-#     array, `names` optional.
-#     """
-#     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
-#     py = np.stack(py, axis=1)
+@threaded
+def plot_pr_curve(px, py, ap, save_dir=Path("pr_curve.png"), names=()):
+    """Plots precision-recall curve, optionally per class, saving to `save_dir`; `px`, `py` are lists, `ap` is Nx2
+    array, `names` optional.
+    """
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+    py = np.stack(py, axis=1)
 
-#     if 0 < len(names) < 21:  # display per-class legend if < 21 classes
-#         for i, y in enumerate(py.T):
-#             ax.plot(px, y, linewidth=1, label=f"{names[i]} {ap[i, 0]:.3f}")  # plot(recall, precision)
-#     else:
-#         ax.plot(px, py, linewidth=1, color="grey")  # plot(recall, precision)
+    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+        for i, y in enumerate(py.T):
+            ax.plot(px, y, linewidth=1, label=f"{names[i]} {ap[i, 0]:.3f}")  # plot(recall, precision)
+    else:
+        ax.plot(px, py, linewidth=1, color="grey")  # plot(recall, precision)
 
-#     ax.plot(px, py.mean(1), linewidth=3, color="blue", label=f"all classes {ap[:, 0].mean():.3f} mAP@0.5")
-#     ax.set_xlabel("Recall")
-#     ax.set_ylabel("Precision")
-#     ax.set_xlim(0, 1)
-#     ax.set_ylim(0, 1)
-#     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-#     ax.set_title("Precision-Recall Curve")
-#     fig.savefig(save_dir, dpi=250)
-#     plt.close(fig)
+    ax.plot(px, py.mean(1), linewidth=3, color="blue", label=f"all classes {ap[:, 0].mean():.3f} mAP@0.5")
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.set_title("Precision-Recall Curve")
+    fig.savefig(save_dir, dpi=250)
+    plt.close(fig)
 
 
-# @threaded
-# def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names=(), xlabel="Confidence", ylabel="Metric"):
-#     """Plots a metric-confidence curve for model predictions, supporting per-class visualization and smoothing."""
-#     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+@threaded
+def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names=(), xlabel="Confidence", ylabel="Metric"):
+    """Plots a metric-confidence curve for model predictions, supporting per-class visualization and smoothing."""
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
-#     if 0 < len(names) < 21:  # display per-class legend if < 21 classes
-#         for i, y in enumerate(py):
-#             ax.plot(px, y, linewidth=1, label=f"{names[i]}")  # plot(confidence, metric)
-#     else:
-#         ax.plot(px, py.T, linewidth=1, color="grey")  # plot(confidence, metric)
+    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+        for i, y in enumerate(py):
+            ax.plot(px, y, linewidth=1, label=f"{names[i]}")  # plot(confidence, metric)
+    else:
+        ax.plot(px, py.T, linewidth=1, color="grey")  # plot(confidence, metric)
 
-#     y = smooth(py.mean(0), 0.05)
-#     ax.plot(px, y, linewidth=3, color="blue", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
-#     ax.set_xlabel(xlabel)
-#     ax.set_ylabel(ylabel)
-#     ax.set_xlim(0, 1)
-#     ax.set_ylim(0, 1)
-#     ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-#     ax.set_title(f"{ylabel}-Confidence Curve")
-#     fig.savefig(save_dir, dpi=250)
-#     plt.close(fig)
+    y = smooth(py.mean(0), 0.05)
+    ax.plot(px, y, linewidth=3, color="blue", label=f"all classes {y.max():.2f} at {px[y.argmax()]:.3f}")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.set_title(f"{ylabel}-Confidence Curve")
+    fig.savefig(save_dir, dpi=250)
+    plt.close(fig)
